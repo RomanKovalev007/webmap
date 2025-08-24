@@ -3,14 +3,30 @@ package crawler
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"golang.org/x/net/html"
 )
 
-func Crawler(url string) ([]string, error){
-	
-	resp, err := http.Get(url)
+// функция поиска подходящих ссылок на страницы
+// на вход подается ссылка на обрабатываемую страницу
+// на выходе получаем слайс подходящих ссылок
+func Crawler(pageUrl string) ([]string, error){
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return nil
+		},
+	}
+	req, err := http.NewRequest("GET", pageUrl, nil)
+	if err != nil{
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; MyCrawler/1.0)")
+
+	resp, err := client.Do(req)
 	if err != nil{
 		return nil, err
 	}
@@ -25,6 +41,12 @@ func Crawler(url string) ([]string, error){
 		return nil, err
 	}
 
+	baseURL, err := url.Parse(pageUrl)
+	if err != nil {
+		return nil, fmt.Errorf("URL parse error: %v", err)
+	}
+
+
 	var links []string
 	var f func(*html.Node)
 
@@ -33,8 +55,17 @@ func Crawler(url string) ([]string, error){
 			for _, attr := range n.Attr {
 				if attr.Key == "href" {
 					link := attr.Val
-					if strings.HasPrefix(link, url){
-						links = append(links, link)
+					if link == "" || strings.HasPrefix(link, "#") || strings.HasPrefix(link, "javascript:") {
+						continue
+					}
+					parsedLink, err := url.Parse(link)
+					if err != nil {
+						continue
+					}
+					absLink := baseURL.ResolveReference(parsedLink).String()
+
+					if strings.HasPrefix(absLink, "http"){
+						links = append(links, absLink)
 					}
 				}
 			}
