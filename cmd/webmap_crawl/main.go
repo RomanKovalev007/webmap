@@ -13,18 +13,15 @@ import (
 
 
 func main() {
-	startURL := "https://simple.wikipedia.org/"
+	startURL := "https://mai.ru/"
 	maxWorkers := 5
 	maxDepth := 2
-	maxPages := 500
-	timeout := 5 * time.Second
+	maxPages := 100
+	timeout := 100 * time.Second
 
 	var mutex sync.Mutex
 
 	visited := make(map[string]bool)
-	mutex.Lock()
-	visited[startURL] = true
-	mutex.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -36,44 +33,39 @@ func main() {
 	}
 	baseDomain := parsedURL.Hostname()
 
-	tasks := make(chan worker.CrawlTask, 1000)
-	results := worker.WorkerPool(ctx, tasks, maxDepth, baseDomain, maxWorkers)
+	tasks := make(chan worker.CrawlTask, maxPages)
+	results := worker.WorkerPool(ctx, &mutex, tasks, visited, maxPages, baseDomain, maxWorkers)
 
+	//записываем первую задачу в канал задач
+	tasks <- worker.CrawlTask{URL: startURL, Depth: 0}
+	mutex.Lock()
+	visited[startURL] = true
+	mutex.Unlock()
 
-	tasks <- worker.CrawlTask{
-		URL: startURL,
-		Depth: 0,
-	}
-	fmt.Println("первая задача записана в таски")
-
+	//читаем из канала результатов и подходящие записываем в результирующую мапу
 	for task := range results{
-		//fmt.Println("MAIN пришла из результатов ", task)			
-		mutex.Lock()
-		if len(visited) > maxPages{
-			mutex.Unlock()
-			cancel()
-			close(tasks)
-			fmt.Println("канал задач закрылся")
-			break 
-		}
+			mutex.Lock()
 		
-		if task.Depth > maxDepth {
+			if task.Depth > maxDepth {
+				mutex.Unlock()
+				continue
+			}
+
+			if visited[task.URL]{
+				mutex.Unlock()
+				continue
+			}
+			visited[task.URL] = true
 			mutex.Unlock()
-			continue
-		}
 
-		if visited[task.URL]{
-			mutex.Unlock()
-			continue
-		}
-		visited[task.URL] = true
-		mutex.Unlock()
-
-
-		tasks <- task
-		//fmt.Println("MAIN отправилась в таски ", task)
+			tasks <- task
 	}
 
+	close(tasks)
+	fmt.Println("канал задач закрылся")
+
+			
+	fmt.Println("Краулер завершил свою работу!")
 	fmt.Println("Найдено страниц: ", len(visited))
 }
 

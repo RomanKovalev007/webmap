@@ -17,10 +17,12 @@ type CrawlTask struct {
 // функция основного обработчика
 func Worker(
 	ctx context.Context,
+	mutex *sync.Mutex,
 	tasks <-chan CrawlTask,
 	results chan<- CrawlTask,
+	visited map[string]bool,
 	wg *sync.WaitGroup,
-	maxDepth int,
+	maxPages int,
 	baseDomain string,
 	num int){
 
@@ -30,7 +32,7 @@ func Worker(
 		// обработка контекста
 		select {
 		case <-ctx.Done():
-			fmt.Println("Воркер номер ", num, "завершил свою работу 1")
+			fmt.Println("Воркер номер ", num, "завершил свою работу по контексту")
 			return
 		// обработка задач поступающих из канала задач
 		case task, ok := <-tasks:
@@ -55,9 +57,15 @@ func Worker(
 			for _, link := range links {
 				select {
 				case results <- CrawlTask{URL: link, Depth: task.Depth + 1}:
-					//fmt.Println("WORKER отправка в результаты ", link, "воркер ", num)
+					mutex.Lock()
+					if len(visited) >= maxPages{
+						mutex.Unlock()
+						fmt.Println("Воркер номер ", num, "завершил свою работу так как список посещенных страниц превысил свою длину")
+						return
+					}
+					mutex.Unlock()
 				case <-ctx.Done():
-					fmt.Println("Воркер номер ", num, "завершил свою работу 2")
+					fmt.Println("Воркер номер ", num, "завершил свою работу по контексту")
 					return
 				}
 				
@@ -66,25 +74,26 @@ func Worker(
 	}
 }
 
-
+// пул запуска воркеров
 func WorkerPool(
 	ctx context.Context,
+	mutex *sync.Mutex,
 	tasks chan CrawlTask,
-	maxDepth int,
+	visited map[string]bool,
+	maxPages int,
 	baseDomain string,
 	WorkerCount int) chan CrawlTask {
 
 	wg := sync.WaitGroup{}
-		
+
 	results := make(chan CrawlTask)
-	
+
 	go func ()  {
 		for i := 1; i <= WorkerCount; i++{
 			wg.Add(1)
 			fmt.Println("воркер запущен ", i)
-			go Worker(ctx, tasks, results, &wg, maxDepth, baseDomain, i)
+			go Worker(ctx, mutex, tasks, results, visited, &wg, maxPages, baseDomain, i)
 		} 
-	
 		wg.Wait()
 		fmt.Println("канал результатов закрылся")
 		close(results)
