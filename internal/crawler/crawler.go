@@ -13,7 +13,7 @@ import (
 // функция поиска подходящих ссылок на страницы
 // на вход подается ссылка на обрабатываемую страницу
 // на выходе получаем слайс подходящих ссылок
-func Crawler(pageUrl string) ([]string, error){
+func Crawler(pageUrl string, baseDomain string) ([]string, error){
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
