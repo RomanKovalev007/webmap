@@ -14,10 +14,10 @@ import (
 
 func main() {
 	startURL := "https://mai.ru/"
-	maxWorkers := 5
-	maxDepth := 2
 	maxPages := 100
+	maxDepth := 2
 	timeout := 100 * time.Second
+	maxWorkers := 5
 
 	var mutex sync.Mutex
 
